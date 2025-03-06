@@ -18,6 +18,7 @@ struct GestureDetails {
     let acceleration: CGPoint?
     let distance: CGFloat?
     let duration: TimeInterval?
+    let browsingMode: Int
 }
 
 struct LogViewer: View {
@@ -146,6 +147,7 @@ struct GestureLogItemView: View {
                         DetailRow(title: "Device Orientation", value: GestureDescriptions.orientationDescription(item.detailInfo.orientation))
                         DetailRow(title: "Screen Area", value: GestureDescriptions.areaDescription(item.detailInfo.area))
                         DetailRow(title: "Previous Gesture", value: GestureDescriptions.gestureTypeDescription(item.detailInfo.previousGesture))
+                        DetailRow(title: "Browsing Mode", value: getBrowsingModeName(item.detailInfo.browsingMode))
                     }
                     
                     // Position Info
@@ -229,6 +231,15 @@ struct GestureLogItemView: View {
     
     private func formatAcceleration(_ acceleration: CGPoint) -> String {
         "H: \(String(format: "%.1f", abs(acceleration.x)))px/s², V: \(String(format: "%.1f", abs(acceleration.y)))px/s²"
+    }
+    
+    private func getBrowsingModeName(_ value: Int) -> String {
+        switch value {
+        case 1: return "Short Video"
+        case 2: return "Waterfall"
+        case 3: return "Normal"
+        default: return "Unknown"
+        }
     }
 }
 

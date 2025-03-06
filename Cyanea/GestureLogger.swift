@@ -10,6 +10,9 @@ class GestureLogger {
     private var lastGestureType: Int = -1 // -1表示没有上一个手势
     private let motionManager = CMMotionManager()
     
+    // 添加当前浏览模式
+    @Published var currentMode: BrowsingMode = .normal
+    
     struct LogEntry: Identifiable {
         let id = UUID()
         let timestamp: Date
@@ -27,8 +30,8 @@ class GestureLogger {
     private var currentDragSession: (startTime: Date, startPoint: CGPoint, lastPoint: CGPoint, lastVelocity: CGPoint, lastUpdateTime: Date)?
     
     init() {
-        // 初始化CSV头
-        temporaryCSVData.append("start_time,end_time,type,start_x,start_y,end_x,end_y,velocity_x,velocity_y,acceleration_x,acceleration_y,total_distance,duration,orientation,motion_x,motion_y,motion_z,gesture_area,previous_gesture")
+        // 修改CSV头，添加模式字段
+        temporaryCSVData.append("start_time,end_time,type,start_x,start_y,end_x,end_y,velocity_x,velocity_y,acceleration_x,acceleration_y,total_distance,duration,orientation,motion_x,motion_y,motion_z,gesture_area,previous_gesture,browsing_mode")
         
         // 启动设备运动更新
         if motionManager.isDeviceMotionAvailable {
@@ -97,7 +100,8 @@ class GestureLogger {
     
     func clearLogs() {
         entries.removeAll()
-        temporaryCSVData = ["start_time,end_time,type,start_x,start_y,end_x,end_y,velocity_x,velocity_y,acceleration_x,acceleration_y,total_distance,duration,orientation,motion_x,motion_y,motion_z,gesture_area,previous_gesture"]
+        // 更新CSV头，包含模式字段
+        temporaryCSVData = ["start_time,end_time,type,start_x,start_y,end_x,end_y,velocity_x,velocity_y,acceleration_x,acceleration_y,total_distance,duration,orientation,motion_x,motion_y,motion_z,gesture_area,previous_gesture,browsing_mode"]
         savedEntries.removeAll()
         GestureImageRenderer.shared.clearImage()
     }
@@ -108,7 +112,8 @@ class GestureLogger {
         let motion = getCurrentDeviceMotion()
         let area = GestureArea.determineArea(point: CGPoint(x: x1, y: y1), in: screenSize).rawValue
         
-        let csvLine = "\(timestamp.timeIntervalSince1970),\(timestamp.timeIntervalSince1970),\(gestureTypeValue),\(x1),\(y1),\(x1),\(y1),0,0,0,0,0,0,\(getDeviceOrientation()),\(motion.x),\(motion.y),\(motion.z),\(area),\(lastGestureType)"
+        // 添加模式到CSV行
+        let csvLine = "\(timestamp.timeIntervalSince1970),\(timestamp.timeIntervalSince1970),\(gestureTypeValue),\(x1),\(y1),\(x1),\(y1),0,0,0,0,0,0,\(getDeviceOrientation()),\(motion.x),\(motion.y),\(motion.z),\(area),\(lastGestureType),\(currentMode.rawValue)"
         
         if !savedEntries.contains(csvLine) {
             temporaryCSVData.append(csvLine)
@@ -128,7 +133,8 @@ class GestureLogger {
                     velocity: nil,
                     acceleration: nil,
                     distance: nil,
-                    duration: nil
+                    duration: nil,
+                    browsingMode: currentMode.rawValue
                 )
             )
             entries.append(entry)
@@ -199,6 +205,7 @@ class GestureLogger {
             y: (session.lastVelocity.y - 0) / CGFloat(totalTime)
         )
         
+        // 添加模式到CSV行
         let csvLine = """
         \(session.startTime.timeIntervalSince1970),\
         \(endTime.timeIntervalSince1970),\
@@ -218,7 +225,8 @@ class GestureLogger {
         \(motion.y),\
         \(motion.z),\
         \(startArea),\
-        \(lastGestureType)
+        \(lastGestureType),\
+        \(currentMode.rawValue)
         """
         
         if !savedEntries.contains(csvLine) {
@@ -240,7 +248,8 @@ class GestureLogger {
                     velocity: avgVelocity,
                     acceleration: avgAcceleration,
                     distance: totalDistance,
-                    duration: totalTime
+                    duration: totalTime,
+                    browsingMode: currentMode.rawValue
                 )
             )
             entries.append(entry)

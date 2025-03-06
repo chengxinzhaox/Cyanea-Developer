@@ -16,15 +16,18 @@ struct ContentView: View {
     @State private var showingTutorial = true
     @State private var longPressProgress: CGFloat = 0
     
+    // 添加模式选择状态
+    @State private var selectedMode: BrowsingMode = .normal
+    
     let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // 背景和主要内容
+                // 背景
                 Color.white.ignoresSafeArea()
                 
-                // 手势轨迹层
+                // 手势轨迹层 - 移到VStack下方，确保不会覆盖UI元素
                 Canvas { context, size in
                     for point in gesturePoints {
                         let rect = CGRect(x: point.position.x - 5,
@@ -44,22 +47,36 @@ struct ContentView: View {
                         }
                     }
                 }
+                .allowsHitTesting(false) // 禁止Canvas接收点击事件
+                
+                // UI层 - 放在最上层
+                VStack(spacing: 0) {
+                    // 模式选择器 - 缩小高度
+                    ModeSelector(selectedMode: $selectedMode, showingLogs: $showingLogs)
+                        .padding(.top, 8)
+                        .padding(.horizontal, 12)
+                        .frame(height: 44) // 减小高度
+                    
+                    Spacer()
+                }
                 
                 // 教程提示层
                 if showingTutorial {
                     TutorialOverlay(isVisible: $showingTutorial)
                 }
-                
-                // 长按进度指示器
-                if longPressProgress > 0 {
-                    ProgressView(value: longPressProgress)
-                        .progressViewStyle(CircularProgressViewStyle())
-                        .scaleEffect(1.5)
-                }
+            }
+            .onChange(of: selectedMode) { newMode in
+                // 更新 GestureLogger 中的模式
+                GestureLogger.shared.currentMode = newMode
             }
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
+                        // 忽略顶部区域的手势，防止与模式选择器冲突
+                        if value.location.y < 60 {
+                            return
+                        }
+                        
                         let currentTime = Date()
                         if value.translation == .zero {
                             dragStartLocation = value.location
@@ -79,6 +96,11 @@ struct ContentView: View {
                         }
                     }
                     .onEnded { value in
+                        // 忽略顶部区域的手势，防止与模式选择器冲突
+                        if value.location.y < 60 {
+                            return
+                        }
+                        
                         if value.translation == .zero {
                             let newPoint = GesturePoint(position: value.location,
                                                        type: .tap,
@@ -100,23 +122,6 @@ struct ContentView: View {
                         }
                     }
             )
-            .simultaneousGesture(
-                LongPressGesture(minimumDuration: 3.0, maximumDistance: 50)
-                    .simultaneously(with: SpatialTapGesture(count: 3))
-                    .onChanged { _ in
-                        withAnimation {
-                            longPressProgress = min(1.0, longPressProgress + 0.1)
-                        }
-                    }
-                    .onEnded { value in
-                        if let isPressing = value.first, isPressing {
-                            showingLogs = true
-                        }
-                        withAnimation {
-                            longPressProgress = 0
-                        }
-                    }
-            )
             .onReceive(timer) { _ in
                 gesturePoints = gesturePoints.compactMap { point in
                     var updatedPoint = point
@@ -132,6 +137,59 @@ struct ContentView: View {
                 LogViewer()
             }
         }
+    }
+}
+
+// 模式选择器组件 - 缩小并移除文字
+struct ModeSelector: View {
+    @Binding var selectedMode: BrowsingMode
+    @Binding var showingLogs: Bool
+    
+    var body: some View {
+        HStack(spacing: 0) {
+            // 模式选择按钮
+            HStack(spacing: 0) {
+                ForEach(BrowsingMode.allCases) { mode in
+                    Button(action: {
+                        selectedMode = mode
+                    }) {
+                        Image(systemName: mode.icon)
+                            .font(.system(size: 20))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                            .background(selectedMode == mode ? Color.blue.opacity(0.1) : Color.clear)
+                            .foregroundColor(selectedMode == mode ? .blue : .gray)
+                            .cornerRadius(8)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            
+            // 分隔线
+            Divider()
+                .frame(height: 24)
+                .padding(.horizontal, 2)
+            
+            // 日志按钮
+            Button(action: {
+                showingLogs = true
+            }) {
+                Image(systemName: "list.bullet.clipboard")
+                    .font(.system(size: 20))
+                    .frame(width: 40)
+                    .padding(.vertical, 6)
+                    .background(Color.blue.opacity(0.2))
+                    .foregroundColor(.blue)
+                    .cornerRadius(8)
+            }
+        }
+        .padding(6) // 减小内边距
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                .background(Color.white.opacity(0.9))
+        )
+        .cornerRadius(8)
     }
 }
 
