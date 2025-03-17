@@ -31,15 +31,15 @@ class GestureImageRenderer {
                                 width: 10,
                                 height: 10)
                 
-                if point.type == .tap {
+                switch point.type {
+                case .tap:
                     context.setFillColor(UIColor.green.withAlphaComponent(0.5).cgColor)
                     context.fillEllipse(in: rect)
-                } else {
-                    // 滑动点
+                case .drag:
                     context.setFillColor(UIColor.red.withAlphaComponent(0.2).cgColor)
                     context.fillEllipse(in: rect)
                     
-                    // 绘制连接线
+                    // 如果是滑动，绘制连接线
                     if let lastPoint = lastDragPoint {
                         context.setStrokeColor(UIColor.red.withAlphaComponent(0.2).cgColor)
                         context.setLineWidth(2)
@@ -48,6 +48,19 @@ class GestureImageRenderer {
                         context.strokePath()
                     }
                     lastDragPoint = point.position
+                case .longPress:
+                    // 长按使用黄色，绘制一个大一点的圆圈
+                    let largerRect = CGRect(x: point.position.x - 10,
+                                          y: point.position.y - 10,
+                                          width: 20,
+                                          height: 20)
+                    context.setStrokeColor(UIColor.yellow.withAlphaComponent(0.7).cgColor)
+                    context.setLineWidth(2)
+                    context.strokeEllipse(in: largerRect)
+                    
+                    // 填充内部小圆
+                    context.setFillColor(UIColor.yellow.withAlphaComponent(0.3).cgColor)
+                    context.fillEllipse(in: rect)
                 }
             }
         }

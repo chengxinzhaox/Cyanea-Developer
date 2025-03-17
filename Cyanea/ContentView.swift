@@ -15,9 +15,19 @@ struct ContentView: View {
     @State private var showingLogs = false
     @State private var showingTutorial = true
     @State private var longPressProgress: CGFloat = 0
+    @State private var isLongPressing = false
+    @State private var longPressLocation: CGPoint = .zero
+    @State private var longPressStartTime: Date = Date()
+    @State private var potentialLongPressLocation: CGPoint = .zero
+    @State private var potentialLongPressStartTime: Date = Date()
+    @State private var isPotentialLongPress = false
     
     // 添加模式选择状态
     @State private var selectedMode: BrowsingMode = .normal
+    
+    // 长按配置
+    private let longPressDuration: TimeInterval = 1.0  // 降低到1秒
+    private let longPressMoveTolerance: CGFloat = 20.0 // 允许20像素的移动
     
     let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
     
@@ -44,6 +54,16 @@ struct ContentView: View {
                         case .drag:
                             context.fill(Circle().path(in: rect),
                                        with: .color(.red))
+                        case .longPress:
+                            // 长按使用黄色，绘制一个大一点的圆圈
+                            let largerRect = CGRect(x: point.position.x - 10,
+                                                  y: point.position.y - 10,
+                                                  width: 20,
+                                                  height: 20)
+                            context.stroke(Circle().path(in: largerRect),
+                                         with: .color(.yellow))
+                            context.fill(Circle().path(in: rect),
+                                       with: .color(.yellow.opacity(0.5)))
                         }
                     }
                 }
@@ -64,6 +84,34 @@ struct ContentView: View {
                 if showingTutorial {
                     TutorialOverlay(isVisible: $showingTutorial)
                 }
+                
+                // 长按指示器 - 添加延迟显示逻辑
+                if isPotentialLongPress {
+                    let pressDuration = Date().timeIntervalSince(potentialLongPressStartTime)
+                    // 只有当按压超过0.5秒时才显示
+                    if pressDuration >= 0.5 {
+                        ZStack {
+                            // 外圈 - 显示允许移动的范围
+                            Circle()
+                                .stroke(Color.yellow.opacity(0.3), lineWidth: 1)
+                                .frame(width: longPressMoveTolerance * 2 + 20, height: longPressMoveTolerance * 2 + 20)
+                            
+                            // 进度环 - 显示长按进度
+                            Circle()
+                                .trim(from: 0, to: min(1.0, (pressDuration - 0.5) / (longPressDuration - 0.5))) // 调整进度计算
+                                .stroke(Color.yellow, lineWidth: 4)
+                                .frame(width: 80, height: 80)
+                                .rotationEffect(.degrees(-90))
+                            
+                            // 内圈 - 固定圆形
+                            Circle()
+                                .stroke(Color.yellow.opacity(0.5), lineWidth: 1)
+                                .frame(width: 80, height: 80)
+                        }
+                        .position(potentialLongPressLocation)
+                        .opacity(min(1.0, (pressDuration - 0.5) * 2)) // 渐入效果
+                    }
+                }
             }
             .onChange(of: selectedMode) { newMode in
                 // 更新 GestureLogger 中的模式
@@ -78,21 +126,65 @@ struct ContentView: View {
                         }
                         
                         let currentTime = Date()
-                        if value.translation == .zero {
-                            dragStartLocation = value.location
-                            lastDragLocation = value.location
-                            lastDragTime = currentTime
-                            GestureLogger.shared.startDragSession(at: value.location)
-                        } else {
-                            if GestureLogger.shared.updateDragSession(at: value.location) {
-                                let newPoint = GesturePoint(position: value.location,
-                                                           type: .drag,
-                                                           opacity: 1.0)
-                                gesturePoints.append(newPoint)
-                                GestureImageRenderer.shared.addGesture([newPoint])
+                        
+                        // 检查是否在长按状态
+                        if isPotentialLongPress {
+                            // 计算与长按起始位置的距离
+                            let distance = sqrt(
+                                pow(value.location.x - potentialLongPressLocation.x, 2) +
+                                pow(value.location.y - potentialLongPressLocation.y, 2)
+                            )
+                            
+                            // 如果移动超出容差范围，取消长按
+                            if distance > longPressMoveTolerance {
+                                isPotentialLongPress = false
+                                
+                                // 开始拖动
+                                if dragStartLocation == .zero {
+                                    dragStartLocation = value.location
+                                    lastDragLocation = value.location
+                                    lastDragTime = currentTime
+                                    GestureLogger.shared.startDragSession(at: value.location)
+                                }
+                            } else {
+                                // 检查是否已经达到长按时间
+                                let pressDuration = currentTime.timeIntervalSince(potentialLongPressStartTime)
+                                if pressDuration >= longPressDuration && !isLongPressing {
+                                    isLongPressing = true
+                                    longPressLocation = value.location // 使用当前位置，而不是起始位置
+                                    longPressStartTime = potentialLongPressStartTime
+                                    
+                                    // 注意：这里不记录长按，因为我们希望在手指抬起时记录
+                                }
                             }
-                            lastDragLocation = value.location
-                            lastDragTime = currentTime
+                        } else if value.translation == .zero {
+                            // 新的触摸点，可能是长按的开始
+                            isPotentialLongPress = true
+                            potentialLongPressLocation = value.location
+                            potentialLongPressStartTime = currentTime
+                            longPressProgress = 0
+                            
+                            // 不再使用 withAnimation，因为我们会在渲染时计算进度
+                        } else {
+                            // 正常的拖动处理
+                            if !isLongPressing {
+                                if dragStartLocation == .zero {
+                                    dragStartLocation = value.location
+                                    lastDragLocation = value.location
+                                    lastDragTime = currentTime
+                                    GestureLogger.shared.startDragSession(at: value.location)
+                                } else {
+                                    if GestureLogger.shared.updateDragSession(at: value.location) {
+                                        let newPoint = GesturePoint(position: value.location,
+                                                                   type: .drag,
+                                                                   opacity: 1.0)
+                                        gesturePoints.append(newPoint)
+                                        GestureImageRenderer.shared.addGesture([newPoint])
+                                    }
+                                    lastDragLocation = value.location
+                                    lastDragTime = currentTime
+                                }
+                            }
                         }
                     }
                     .onEnded { value in
@@ -101,25 +193,74 @@ struct ContentView: View {
                             return
                         }
                         
-                        if value.translation == .zero {
-                            let newPoint = GesturePoint(position: value.location,
-                                                       type: .tap,
-                                                       opacity: 1.0)
+                        // 处理长按结束
+                        if isLongPressing {
+                            let duration = Date().timeIntervalSince(longPressStartTime)
+                            
+                            // 添加长按点
+                            let newPoint = GesturePoint(position: longPressLocation,
+                                                      type: .longPress,
+                                                      opacity: 1.0)
                             gesturePoints.append(newPoint)
                             GestureImageRenderer.shared.addGesture([newPoint])
                             
-                            GestureLogger.shared.logGesture(
-                                type: .tap,
-                                x1: value.location.x,
-                                y1: value.location.y,
+                            // 记录长按
+                            GestureLogger.shared.logLongPress(
+                                x: longPressLocation.x,
+                                y: longPressLocation.y,
+                                duration: duration,
                                 screenSize: geometry.size
                             )
-                        } else {
+                        }
+                        // 处理潜在的长按结束 - 检查是否达到了长按时间但没有移动
+                        else if isPotentialLongPress {
+                            let pressDuration = Date().timeIntervalSince(potentialLongPressStartTime)
+                            
+                            // 如果已经达到长按时间，但isLongPressing没有被设置（可能因为没有移动触发onChanged）
+                            if pressDuration >= longPressDuration {
+                                // 添加长按点
+                                let newPoint = GesturePoint(position: potentialLongPressLocation,
+                                                          type: .longPress,
+                                                          opacity: 1.0)
+                                gesturePoints.append(newPoint)
+                                GestureImageRenderer.shared.addGesture([newPoint])
+                                
+                                // 记录长按
+                                GestureLogger.shared.logLongPress(
+                                    x: potentialLongPressLocation.x,
+                                    y: potentialLongPressLocation.y,
+                                    duration: pressDuration,
+                                    screenSize: geometry.size
+                                )
+                            }
+                            // 如果是短按（小于长按时间）
+                            else if pressDuration < longPressDuration {
+                                let newPoint = GesturePoint(position: value.location,
+                                                           type: .tap,
+                                                           opacity: 1.0)
+                                gesturePoints.append(newPoint)
+                                GestureImageRenderer.shared.addGesture([newPoint])
+                                
+                                GestureLogger.shared.logGesture(
+                                    type: .tap,
+                                    x1: value.location.x,
+                                    y1: value.location.y,
+                                    screenSize: geometry.size
+                                )
+                            }
+                        }
+                        // 处理拖动结束
+                        else if dragStartLocation != .zero {
                             GestureLogger.shared.endDragSession(
                                 at: value.location,
                                 screenSize: geometry.size
                             )
                         }
+                        
+                        // 重置状态
+                        isPotentialLongPress = false
+                        isLongPressing = false
+                        dragStartLocation = .zero
                     }
             )
             .onReceive(timer) { _ in

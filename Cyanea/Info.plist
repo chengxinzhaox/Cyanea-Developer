@@ -4,7 +4,5 @@
 <dict>
 	<key>UIFileSharingEnabled</key>
 	<true/>
-	<key>NSMotionUsageDescription</key>
-	<string>需要访问设备运动数据以记录手势信息</string>
 </dict>
 </plist>

@@ -120,11 +120,12 @@ struct GestureLogItemView: View {
         VStack(alignment: .leading, spacing: 8) {
             // Basic info row
             HStack {
-                Image(systemName: item.type == .tap ? "hand.point.up.fill" : "hand.draw.fill")
-                    .foregroundColor(item.type == .tap ? .blue : .red)
-                    .frame(width: 24)
+                Image(systemName: item.type == .tap ? "hand.point.up.fill" : 
+                         (item.type == .drag ? "hand.draw.fill" : "hand.tap.fill"))
+                    .foregroundColor(item.type == .tap ? .blue : 
+                                     (item.type == .drag ? .red : .yellow))
                 
-                Text(item.type == .tap ? "Tap" : "Swipe")
+                Text(item.basicInfo)
                     .foregroundColor(.gray)
                 
                 Text(DateFormatter.localizedString(from: item.timestamp, dateStyle: .none, timeStyle: .medium))

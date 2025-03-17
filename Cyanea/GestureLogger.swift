@@ -23,6 +23,7 @@ class GestureLogger {
         enum EntryType {
             case tap
             case drag
+            case longPress
         }
     }
     
@@ -30,7 +31,7 @@ class GestureLogger {
     private var currentDragSession: (startTime: Date, startPoint: CGPoint, lastPoint: CGPoint, lastVelocity: CGPoint, lastUpdateTime: Date)?
     
     init() {
-        // 修改CSV头，添加模式字段
+        // 初始化CSV头，添加模式字段
         temporaryCSVData.append("start_time,end_time,type,start_x,start_y,end_x,end_y,velocity_x,velocity_y,acceleration_x,acceleration_y,total_distance,duration,orientation,motion_x,motion_y,motion_z,gesture_area,previous_gesture,browsing_mode")
         
         // 启动设备运动更新
@@ -119,7 +120,7 @@ class GestureLogger {
             temporaryCSVData.append(csvLine)
             savedEntries.insert(csvLine)
             
-            let readableLog = "触摸"  // 简化基本信息显示
+            let readableLog = "Tap"  // 改为英文
             let entry = LogEntry(
                 timestamp: timestamp,
                 type: type,
@@ -233,7 +234,7 @@ class GestureLogger {
             temporaryCSVData.append(csvLine)
             savedEntries.insert(csvLine)
             
-            let readableLog = "滑动"  // 简化基本信息显示
+            let readableLog = "Swipe"  // 改为英文
             
             let entry = LogEntry(
                 timestamp: session.startTime,
@@ -257,5 +258,43 @@ class GestureLogger {
         
         lastGestureType = 1
         currentDragSession = nil
+    }
+    
+    func logLongPress(x: CGFloat, y: CGFloat, duration: TimeInterval, screenSize: CGSize) {
+        let timestamp = Date()
+        let motion = getCurrentDeviceMotion()
+        let area = GestureArea.determineArea(point: CGPoint(x: x, y: y), in: screenSize).rawValue
+        
+        // 添加长按类型 (2 表示长按)
+        let csvLine = "\(timestamp.timeIntervalSince1970),\(timestamp.timeIntervalSince1970 + duration),2,\(x),\(y),\(x),\(y),0,0,0,0,0,\(duration),\(getDeviceOrientation()),\(motion.x),\(motion.y),\(motion.z),\(area),\(lastGestureType),\(currentMode.rawValue)"
+        
+        if !savedEntries.contains(csvLine) {
+            temporaryCSVData.append(csvLine)
+            savedEntries.insert(csvLine)
+            
+            // 在可读日志中包含长按时间
+            let readableLog = "Long Press (\(String(format: "%.1f", duration))s)"
+            let entry = LogEntry(
+                timestamp: timestamp,
+                type: .longPress,
+                data: readableLog,
+                details: GestureDetails(
+                    orientation: getDeviceOrientation(),
+                    motion: motion,
+                    area: area,
+                    previousGesture: lastGestureType,
+                    position: (CGPoint(x: x, y: y), CGPoint(x: x, y: y)),
+                    velocity: nil,
+                    acceleration: nil,
+                    distance: nil,
+                    duration: duration,
+                    browsingMode: currentMode.rawValue
+                )
+            )
+            entries.append(entry)
+            
+            // 更新上一个手势类型 (2 表示长按)
+            lastGestureType = 2
+        }
     }
 } 

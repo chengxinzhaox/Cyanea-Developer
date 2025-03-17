@@ -10,5 +10,6 @@ struct GesturePoint: Identifiable {
     enum PointType {
         case tap
         case drag
+        case longPress
     }
 } 
