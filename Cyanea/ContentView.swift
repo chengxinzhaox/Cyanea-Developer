@@ -180,6 +180,7 @@ struct ContentView: View {
                                                                    opacity: 1.0)
                                         gesturePoints.append(newPoint)
                                         GestureImageRenderer.shared.addGesture([newPoint])
+                                        GestureVideoRecorder.shared.addGesturePoint(point: value.location, type: .drag)
                                     }
                                     lastDragLocation = value.location
                                     lastDragTime = currentTime
@@ -203,6 +204,7 @@ struct ContentView: View {
                                                       opacity: 1.0)
                             gesturePoints.append(newPoint)
                             GestureImageRenderer.shared.addGesture([newPoint])
+                            GestureVideoRecorder.shared.addGesturePoint(point: longPressLocation, type: .longPress)
                             
                             // 记录长按
                             GestureLogger.shared.logLongPress(
@@ -224,6 +226,7 @@ struct ContentView: View {
                                                           opacity: 1.0)
                                 gesturePoints.append(newPoint)
                                 GestureImageRenderer.shared.addGesture([newPoint])
+                                GestureVideoRecorder.shared.addGesturePoint(point: potentialLongPressLocation, type: .longPress)
                                 
                                 // 记录长按
                                 GestureLogger.shared.logLongPress(
@@ -240,6 +243,7 @@ struct ContentView: View {
                                                            opacity: 1.0)
                                 gesturePoints.append(newPoint)
                                 GestureImageRenderer.shared.addGesture([newPoint])
+                                GestureVideoRecorder.shared.addGesturePoint(point: value.location, type: .tap)
                                 
                                 GestureLogger.shared.logGesture(
                                     type: .tap,
@@ -277,6 +281,12 @@ struct ContentView: View {
             .sheet(isPresented: $showingLogs) {
                 LogViewer()
             }
+        }
+        .onAppear {
+            GestureLogger.shared.startVideoRecording()
+        }
+        .onDisappear {
+            GestureLogger.shared.stopVideoRecording()
         }
     }
 }

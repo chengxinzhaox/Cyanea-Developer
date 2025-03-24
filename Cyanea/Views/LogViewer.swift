@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct GestureLogItem: Identifiable {
     let id: UUID
@@ -27,29 +28,44 @@ struct LogViewer: View {
     @State private var toastMessage: String? = nil
     @State private var expandedItems: Set<UUID> = []
     @State private var showingImagePreview = false
+    @State private var showingShareSheet = false
+    @State private var savedURL: URL? = nil
+    
+    // 添加保存进度指示器状态
+    @State private var isSaving = false
+    // 添加标识表示是否需要显示空状态
+    @State private var showEmptyState = false
     
     var body: some View {
         NavigationView {
             ZStack {
                 List {
-                    ForEach(GestureLogger.shared.entries) { entry in
-                        GestureLogItemView(
-                            item: GestureLogItem(
-                                id: entry.id,
-                                timestamp: entry.timestamp,
-                                type: entry.type,
-                                basicInfo: entry.data,
-                                detailInfo: entry.details
-                            ),
-                            isExpanded: expandedItems.contains(entry.id)
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            withAnimation {
-                                if expandedItems.contains(entry.id) {
-                                    expandedItems.remove(entry.id)
-                                } else {
-                                    expandedItems.insert(entry.id)
+                    if GestureLogger.shared.entries.isEmpty && showEmptyState {
+                        Text("No Gesture Records")
+                            .foregroundColor(.gray)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding()
+                            .listRowBackground(Color.clear)
+                    } else {
+                        ForEach(GestureLogger.shared.entries) { entry in
+                            GestureLogItemView(
+                                item: GestureLogItem(
+                                    id: entry.id,
+                                    timestamp: entry.timestamp,
+                                    type: entry.type,
+                                    basicInfo: entry.data,
+                                    detailInfo: entry.details
+                                ),
+                                isExpanded: expandedItems.contains(entry.id)
+                            )
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                withAnimation {
+                                    if expandedItems.contains(entry.id) {
+                                        expandedItems.remove(entry.id)
+                                    } else {
+                                        expandedItems.insert(entry.id)
+                                    }
                                 }
                             }
                         }
@@ -65,6 +81,30 @@ struct LogViewer: View {
                     }
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
+                
+                // 保存进度指示器
+                if isSaving {
+                    ZStack {
+                        Color.black.opacity(0.4)
+                            .edgesIgnoringSafeArea(.all)
+                        
+                        VStack {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(1.5)
+                            
+                            Text("Saving...")
+                                .foregroundColor(.white)
+                                .padding(.top, 16)
+                        }
+                        .padding(30)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(10)
+                    }
+                }
+            }
+            .onAppear {
+                showEmptyState = GestureLogger.shared.entries.isEmpty
             }
             .navigationTitle("Gesture Log")
             .toolbar {
@@ -73,29 +113,30 @@ struct LogViewer: View {
                         showingClearConfirmation = true
                     }
                 }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Preview") {
-                        showingImagePreview = true
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        if let url = GestureLogger.shared.saveLogs() {
-                            withAnimation {
-                                toastMessage = "Saved to folder: \(url.lastPathComponent)"
-                                GestureLogger.shared.clearLogs()
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                    withAnimation {
-                                        toastMessage = nil
-                                    }
-                                }
-                            }
+                    HStack(spacing: 16) {
+                        Button(action: {
+                            showingImagePreview = true
+                        }) {
+                            Image(systemName: "photo")
                         }
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Close") {
-                        dismiss()
+                        
+                        Menu {
+                            Button("Save") {
+                                saveData()
+                            }
+                            
+                            Button("Save & Share") {
+                                saveAndShareData()
+                            }
+                        } label: {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        
+                        Button("Close") {
+                            dismiss()
+                        }
                     }
                 }
             }
@@ -103,10 +144,92 @@ struct LogViewer: View {
                 Button("Cancel", role: .cancel) { }
                 Button("Clear", role: .destructive) {
                     GestureLogger.shared.clearLogs()
+                    showEmptyState = true
                 }
             }
             .sheet(isPresented: $showingImagePreview) {
                 GestureImagePreview()
+            }
+            .background(
+                ShareSheetView(isPresented: $showingShareSheet, items: [savedURL].compactMap { $0 })
+            )
+        }
+    }
+    
+    // 保存数据方法
+    private func saveData() {
+        isSaving = true
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            let url = GestureLogger.shared.saveLogs()
+            
+            DispatchQueue.main.async {
+                isSaving = false
+                
+                if let url = url {
+                    savedURL = url
+                    // 保存后清除数据
+                    GestureLogger.shared.clearLogs()
+                    showEmptyState = true
+                    
+                    withAnimation {
+                        toastMessage = "Saved to folder: \(url.lastPathComponent)"
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation {
+                                toastMessage = nil
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 保存并分享数据
+    private func saveAndShareData() {
+        isSaving = true
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            let url = GestureLogger.shared.saveLogs()
+            
+            DispatchQueue.main.async {
+                isSaving = false
+                
+                if let url = url {
+                    savedURL = url
+                    // 保存后清除数据
+                    GestureLogger.shared.clearLogs()
+                    showEmptyState = true
+                    showingShareSheet = true
+                }
+            }
+        }
+    }
+}
+
+// 分享表单视图
+struct ShareSheetView: UIViewControllerRepresentable {
+    @Binding var isPresented: Bool
+    var items: [Any]
+    
+    func makeUIViewController(context: Context) -> UIViewController {
+        let controller = UIViewController()
+        return controller
+    }
+    
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        if isPresented {
+            let activityVC = UIActivityViewController(
+                activityItems: items,
+                applicationActivities: nil
+            )
+            
+            activityVC.completionWithItemsHandler = { _, _, _, _ in
+                isPresented = false
+            }
+            
+            DispatchQueue.main.async {
+                uiViewController.present(activityVC, animated: true, completion: nil)
             }
         }
     }
@@ -142,7 +265,7 @@ struct GestureLogItemView: View {
             
             // Detailed info
             if isExpanded {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {                    
                     // Basic Properties
                     VStack(alignment: .leading, spacing: 4) {
                         DetailRow(title: "Device Orientation", value: GestureDescriptions.orientationDescription(item.detailInfo.orientation))

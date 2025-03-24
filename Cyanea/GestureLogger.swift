@@ -74,11 +74,13 @@ class GestureLogger {
         dateFormatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
         let timestamp = dateFormatter.string(from: Date())
         
-        // 创建时间戳文件夹
-        let folderURL = documentsDirectory.appendingPathComponent("gesture_data_\(timestamp)")
+        // 使用固定位置以便在文件应用中可见
+        let folderName = "gesture_data_\(timestamp)"
+        let folderURL = documentsDirectory.appendingPathComponent(folderName)
         
         do {
-            try fileManager.createDirectory(at: folderURL, withIntermediateDirectories: true)
+            // 创建文件夹
+            try fileManager.createDirectory(at: folderURL, withIntermediateDirectories: true, attributes: nil)
             
             // 保存CSV文件
             let csvURL = folderURL.appendingPathComponent("gesture_data.csv")
@@ -90,6 +92,41 @@ class GestureLogger {
                let imageData = image.pngData() {
                 let imageURL = folderURL.appendingPathComponent("gesture_visualization.png")
                 try imageData.write(to: imageURL)
+            }
+            
+            // 生成并保存视频（使用完成回调以确保文件已完成写入）
+            let videoSemaphore = DispatchSemaphore(value: 0)
+            GestureVideoRecorder.shared.generateVideo { videoURL in
+                defer { videoSemaphore.signal() }
+                
+                if let videoURL = videoURL, let videoData = try? Data(contentsOf: videoURL) {
+                    let finalVideoURL = folderURL.appendingPathComponent("gesture_playback.mp4")
+                    try? videoData.write(to: finalVideoURL)
+                }
+            }
+            
+            // 等待视频生成完成，但设置超时以避免无限等待
+            _ = videoSemaphore.wait(timeout: .now() + 10)
+            
+            // 添加说明文件，使文件夹的用途更加明确
+            let readmeURL = folderURL.appendingPathComponent("README.txt")
+            let readmeContent = """
+            Cyanea 手势记录数据
+            
+            此文件夹包含以下文件：
+            - gesture_data.csv：记录的所有手势数据
+            - gesture_visualization.png：手势轨迹图像
+            - gesture_playback.mp4：手势播放视频（透明背景）
+            
+            时间戳: \(timestamp)
+            """
+            try readmeContent.write(to: readmeURL, atomically: true, encoding: .utf8)
+            
+            // 不再尝试修改URL属性，iOS会自动使Documents目录中的文件在文件应用中可见
+            
+            // 显示分享控制器
+            DispatchQueue.main.async {
+                self.documentController = UIDocumentInteractionController(url: folderURL)
             }
             
             return folderURL
@@ -297,4 +334,37 @@ class GestureLogger {
             lastGestureType = 2
         }
     }
+    
+    func startVideoRecording() {
+        GestureVideoRecorder.shared.startRecording()
+    }
+    
+    func stopVideoRecording() {
+        GestureVideoRecorder.shared.stopRecording()
+    }
+    
+    func generateVideo(completion: @escaping (URL?) -> Void) {
+        GestureVideoRecorder.shared.generateVideo(completion: completion)
+    }
+    
+    // 添加共享文件夹的方法
+    func shareLogFolder(from viewController: UIViewController, completion: ((Bool) -> Void)? = nil) {
+        guard let documentController = documentController else {
+            completion?(false)
+            return
+        }
+        
+        documentController.delegate = FileShareDelegate.shared
+        FileShareDelegate.shared.completionHandler = completion
+        
+        // 显示共享选项
+        if !documentController.presentOpenInMenu(from: .zero, in: viewController.view, animated: true) {
+            if !documentController.presentOptionsMenu(from: .zero, in: viewController.view, animated: true) {
+                completion?(false)
+            }
+        }
+    }
+    
+    // 文件共享代理
+    private var documentController: UIDocumentInteractionController?
 } 

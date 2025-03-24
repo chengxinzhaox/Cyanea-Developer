@@ -1,8 +1,10 @@
 import SwiftUI
+import Photos
 
 struct GestureImagePreview: View {
     @Environment(\.dismiss) private var dismiss
     @State private var toastMessage: String? = nil
+    @State private var isExporting = false
     
     var body: some View {
         NavigationView {
@@ -15,7 +17,7 @@ struct GestureImagePreview: View {
                         .resizable()
                         .scaledToFit()
                 } else {
-                    Text("No gesture data")
+                    Text("No Gesture Data")
                         .foregroundColor(.white)
                 }
                 
@@ -28,27 +30,66 @@ struct GestureImagePreview: View {
                     }
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
+                
+                if isExporting {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+                        .frame(width: 100, height: 100)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(10)
+                }
             }
             .navigationTitle("Gesture Visualization")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        if let url = GestureImageRenderer.shared.saveCurrentImage() {
+                    Button("Save to Album") {
+                        saveImageToAlbum()
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Close") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+    
+    // 保存图像到相册
+    private func saveImageToAlbum() {
+        guard let image = GestureImageRenderer.shared.getCurrentImage() else { return }
+        
+        isExporting = true
+        
+        PHPhotoLibrary.requestAuthorization { status in
+            guard status == .authorized else {
+                DispatchQueue.main.async {
+                    isExporting = false
+                    withAnimation {
+                        toastMessage = "No permission to access photo library"
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                             withAnimation {
-                                toastMessage = "Saved to: \(url.lastPathComponent)"
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                                    withAnimation {
-                                        toastMessage = nil
-                                    }
-                                }
+                                toastMessage = nil
                             }
                         }
                     }
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Close") {
-                        dismiss()
+                return
+            }
+            
+            UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+            
+            DispatchQueue.main.async {
+                isExporting = false
+                withAnimation {
+                    toastMessage = "Image saved to photo library"
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        withAnimation {
+                            toastMessage = nil
+                        }
                     }
                 }
             }
